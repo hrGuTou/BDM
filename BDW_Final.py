@@ -145,7 +145,6 @@ def filterAndCount(records):
             if side == 'L':
                 if houseRanges[0] != -1:
                     res[v[-1] - 2015] += 1
-
                     if lastLCSCL[0][0:3] != k[0:3]:
                         # new bound, return and reset
                         # print(res)
@@ -159,7 +158,6 @@ def filterAndCount(records):
             else:
                 if houseRanges[2] != -1:
                     res[v[-1] - 2015] += 1
-
                     if lastRCSCL != k[0:3]:
                         # new bound, return and reset
                         yield lastRCSCL[1][1], res
@@ -217,9 +215,7 @@ if __name__ == '__main__':
     output = res_union.mapPartitions(filterAndCount).map(lambda x: (int(x[0]), x[1])) \
         .reduceByKey(lambda x, y: [x[0] + y[0], x[1] + y[1], x[2] + y[2], x[3] + y[3], x[4] + y[4]]) \
         .sortByKey() \
-        .take(20)
+        .map(lambda x: (x[0],x[1],x[2],x[3],x[4],x[5])) \
+        .collect()
 
-    # output = res_filtered.collect()
-
-    for i in output:
-        print(i)
+    sc.parallelize(output).saveAsTextFile('BDM_FINAL_OUTPUT')
