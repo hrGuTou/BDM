@@ -52,24 +52,27 @@ def exactViolation(idx, records):
     reader = csv.reader(records)
     for row in reader:
         (house, street, county, year) = (str(row[23]), str(row[24]), str(row[21]), int(row[4].split('/')[2]))
-        if not year in (2015, 2016, 2017, 2018, 2019) or not house or re.search('[a-zA-Z]', house):
-            continue
-        house = re.findall(r"[\w']+", house)
-        if len(house) > 2 or len(house) < 1:
-            continue
-        if county in BOROUGH:
-            if len(house) > 1:
-                if int(house[1]) % 2 == 0:
-                    side = 'R'
+        
+        if year in (2015, 2016, 2017, 2018, 2019):
+        
+            if not house or re.search('[a-zA-Z]', house):
+                continue
+            house = re.findall(r"[\w']+", house)
+            if len(house) > 2 or len(house) < 1:
+                continue
+            if county in BOROUGH:
+                if len(house) > 1:
+                    if int(house[1]) % 2 == 0:
+                        side = 'R'
+                    else:
+                        side = 'L'
                 else:
-                    side = 'L'
-            else:
-                if int(house[0]) % 2 == 0:
-                    side = 'R'
-                else:
-                    side = 'L'
-            yield Row(StreetName=street.upper(), Borough=BOROUGH[county], HouseNumber=list(map(int, house)), Side=side,
-                      Year=year, Count=1)
+                    if int(house[0]) % 2 == 0:
+                        side = 'R'
+                    else:
+                        side = 'L'
+                yield Row(StreetName=street.upper(), Borough=BOROUGH[county], HouseNumber=list(map(int, house)), Side=side,
+                          Year=year, Count=1)
 
 
 def exactCSCL(idx, records):
@@ -129,7 +132,7 @@ if __name__ == '__main__':
 
     #vData = violationData2015.union(violationData2016)
 
-    csclData = spark.sparkContext.textFile(CSCLCSV).mapPartitionsWithIndex(exactCSCL)
+    csclData = spark.sparkContext.textFile(CSCLCSV).mapPartitionsWithIndex(exactCSCL).cache()
 
     violationSchema = StructType([StructField('StreetName', StringType()),
                                   StructField('Borough', StringType()),
