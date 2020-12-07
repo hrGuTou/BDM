@@ -125,9 +125,9 @@ if __name__ == '__main__':
     spark = SparkSession.builder.getOrCreate()
 
     violationData2015 = spark.sparkContext.textFile(csv2015).mapPartitionsWithIndex(exactViolation).cache()
-    violationData2016 = spark.sparkContext.textFile(csv2015).mapPartitionsWithIndex(exactViolation).cache()
+    #violationData2016 = spark.sparkContext.textFile(csv2015).mapPartitionsWithIndex(exactViolation).cache()
 
-    vData = violationData2015.union(violationData2016)
+    #vData = violationData2015.union(violationData2016)
 
     csclData = spark.sparkContext.textFile(CSCLCSV).mapPartitionsWithIndex(exactCSCL)
 
@@ -147,7 +147,7 @@ if __name__ == '__main__':
                              StructField('R', ArrayType(StringType()))
                              ])
 
-    df_violation = sqlContext.createDataFrame(vData, violationSchema)
+    df_violation = sqlContext.createDataFrame(violationData2015, violationSchema)
     df_cscl = sqlContext.createDataFrame(csclData, csclSchema)
 
     df_res = df_cscl.join(df_violation, [(df_violation.Borough == df_cscl.Borough) & (
