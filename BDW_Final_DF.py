@@ -1,17 +1,13 @@
-from pyspark.shell import sqlContext
-from pyspark.sql import SparkSession
-from pyspark.sql import Row
 import re
-from pyspark.sql import functions as F
-from pyspark.sql.types import *
 
-# sample = 'sample.csv'
-# csv2015 = 'Parking_Violations_Issued_-_Fiscal_Year_2015.csv'
-# csv2016 = 'Parking_Violations_Issued_-_Fiscal_Year_2016.csv'
-# CSCLCSV = 'nyc_cscl.csv'
+from pyspark import SparkContext
 
-csv2015 = '/data/share/bdm/nyc_parking_violation/2015.csv'
-CSCLCSV = '/data/share/bdm/nyc_cscl.csv'
+year2015 = '/data/share/bdm/nyc_parking_violation/2015.csv'
+year2016 = '/data/share/bdm/nyc_parking_violation/2016.csv'
+year2017 =  '/data/share/bdm/nyc_parking_violation/2017.csv'
+year2018 = '/data/share/bdm/nyc_parking_violation/2018.csv'
+year2019 = '/data/share/bdm/nyc_parking_violation/2019.csv'
+nyc_cscl = '/data/share/bdm/nyc_cscl.csv'
 
 BOROCODE = {
     1: 'Manhattan',
@@ -44,17 +40,22 @@ BOROUGH = {
 }
 
 
-def exactViolation(idx, records):
-    if idx == 0:
+def exactViolation(partId, records):
+    if partId == 0:
+        # skip header
         next(records)
 
     import csv
     reader = csv.reader(records)
     for row in reader:
+        if len(row) < 25:
+            continue
+        if len(row[4].split('/')) < 3:
+            continue
         (house, street, county, year) = (str(row[23]), str(row[24]), str(row[21]), int(row[4].split('/')[2]))
-        
+
         if year in (2015, 2016, 2017, 2018, 2019):
-        
+
             if not house or re.search('[a-zA-Z]', house):
                 continue
             house = re.findall(r"[\w']+", house)
@@ -71,90 +72,149 @@ def exactViolation(idx, records):
                         side = 'R'
                     else:
                         side = 'L'
-                yield Row(StreetName=street.upper(), Borough=BOROUGH[county], HouseNumber=list(map(int, house)), Side=side,
-                          Year=year, Count=1)
+                yield (street.upper(), BOROUGH[county], tuple(map(int, house)), 'v'), (
+                'v', side, tuple(map(int, house)), year)
 
 
-def exactCSCL(idx, records):
-    if idx == 0:
+def exactCSCL(partId, records):
+    if partId == 0:
+        # skip header
         next(records)
 
     import csv
     reader = csv.reader(records)
     for row in reader:
         (physicalID, fullSt, stLabel, boCode, L_LOW_HN, L_HIGH_HN, R_LOW_HN, R_HIGH_HN) = (
-            int(row[0]), row[28], row[10], int(row[13]), row[2], row[3], row[4], row[5])
-
+            row[0], row[28], row[10], int(row[13]), row[2].split('-'), row[3].split('-'), row[4].split('-'),
+            row[5].split('-'))
         if boCode in BOROCODE:
-            if L_LOW_HN and L_HIGH_HN and R_LOW_HN and R_HIGH_HN:
-                yield Row(PhysicalID=physicalID, FullStreet=fullSt.upper(), StreetLabel=stLabel,
-                          Borough=BOROCODE[boCode], L=[L_LOW_HN, L_HIGH_HN], R=[R_LOW_HN, R_HIGH_HN])
+            if physicalID.isdigit():
+                if fullSt == stLabel:
+                    if L_LOW_HN[0]:
+                        yield (fullSt.upper(), BOROCODE[boCode], tuple(map(int, L_LOW_HN)), 'c'), (
+                        'c', physicalID, 'L', tuple(map(int, L_LOW_HN)))
+                    if L_HIGH_HN[0]:
+                        yield (fullSt.upper(), BOROCODE[boCode], tuple(map(int, L_HIGH_HN)), 'c'), (
+                        'c', physicalID, 'L', tuple(map(int, L_HIGH_HN)))
+                    if R_LOW_HN[0]:
+                        yield (fullSt.upper(), BOROCODE[boCode], tuple(map(int, R_LOW_HN)), 'c'), (
+                        'c', physicalID, 'R', tuple(map(int, R_LOW_HN)))
+                    if R_HIGH_HN[0]:
+                        yield (fullSt.upper(), BOROCODE[boCode], tuple(map(int, R_HIGH_HN)), 'c'), (
+                        'c', physicalID, 'R', tuple(map(int, R_HIGH_HN)))
+                else:
+                    if L_LOW_HN[0]:
+                        if stLabel:
+                            yield (stLabel.upper(), BOROCODE[boCode], tuple(map(int, L_LOW_HN)), 'c'), (
+                            'c', physicalID, 'L', tuple(map(int, L_LOW_HN)))
+                        if fullSt:
+                            yield (fullSt.upper(), BOROCODE[boCode], tuple(map(int, L_LOW_HN)), 'c'), (
+                            'c', physicalID, 'L', tuple(map(int, L_LOW_HN)))
+                    if L_HIGH_HN[0]:
+                        if stLabel:
+                            yield (stLabel.upper(), BOROCODE[boCode], tuple(map(int, L_HIGH_HN)), 'c'), (
+                            'c', physicalID, 'L', tuple(map(int, L_HIGH_HN)))
+                        if fullSt:
+                            yield (fullSt.upper(), BOROCODE[boCode], tuple(map(int, L_HIGH_HN)), 'c'), (
+                            'c', physicalID, 'L', tuple(map(int, L_HIGH_HN)))
+                    if R_LOW_HN[0]:
+                        if stLabel:
+                            yield (stLabel.upper(), BOROCODE[boCode], tuple(map(int, R_LOW_HN)), 'c'), (
+                            'c', physicalID, 'R', tuple(map(int, R_LOW_HN)))
+                        if fullSt:
+                            yield (fullSt.upper(), BOROCODE[boCode], tuple(map(int, R_LOW_HN)), 'c'), (
+                            'c', physicalID, 'R', tuple(map(int, R_LOW_HN)))
+                    if R_HIGH_HN[0]:
+                        if stLabel:
+                            yield (stLabel.upper(), BOROCODE[boCode], tuple(map(int, R_HIGH_HN)), 'c'), (
+                            'c', physicalID, 'R', tuple(map(int, R_HIGH_HN)))
+                        if fullSt:
+                            yield (fullSt.upper(), BOROCODE[boCode], tuple(map(int, R_HIGH_HN)), 'c'), (
+                            'c', physicalID, 'R', tuple(map(int, R_HIGH_HN)))
 
 
-@F.udf(returnType=BooleanType())
-def myfilter(house, side, Lrange, Rrange):
-    if not house or not side or not Lrange or not Rrange:
-        return False
-    Left_low = list(map(int, Lrange[0].split('-')))
-    Left_high = list(map(int, Lrange[1].split('-')))
-    Right_low = list(map(int, Rrange[0].split('-')))
-    Right_high = list(map(int, Rrange[1].split('-')))
+def filterAndCount(records):
+    res = [0, 0, 0, 0, 0]
+    houseRanges = [-1, -1, -1, -1]  # initialize range (0L low, 1L high, 2R low,3 R high)
+    lastLCSCL = None
+    lastRCSCL = None
+    for k, v in records:
+        # print(k, v)
+        if v[0] == 'v':
+            side = v[1]
+            if side == 'L':
+                if houseRanges[0] != -1:
+                    res[v[-1] - 2015] += 1
+                    if lastLCSCL[0][0:3] != k[0:3]:
+                        # new bound, return and reset
+                        # print(res)
+                        yield lastLCSCL[1][1], res
+                        lastLCSCL = None
+                        res = [0, 0, 0, 0, 0]
+                        houseRanges[0] = -1
+                        houseRanges[2] = -1
+                        continue
 
-    if len(house) == 1:
-        # single number
-        if side == 'L':
-            # left side
-            if not len(Left_low) == 1:
-                return False
-            return Left_low[0] <= house[0] <= Left_high[0]
-        else:
-            # right side
-            if not len(Right_low) == 1:
-                return False
-            return Right_low[0] <= house[0] <= Right_high[0]
-    else:
-        # compound number
-        if side == 'L':
-            if not len(Left_low) == 2:
-                return False
-            return Left_low[0] <= house[0] <= Left_high[0] and Left_low[1] <= house[1] <= Left_high[1]
-        else:
-            if not len(Right_low) == 2:
-                return False
-            return Right_low[0] <= house[0] <= Right_high[0] and Right_low[1] <= house[1] <= Right_high[1]
+            else:
+                if houseRanges[2] != -1:
+                    res[v[-1] - 2015] += 1
+                    if lastRCSCL != k[0:3]:
+                        # new bound, return and reset
+                        yield lastRCSCL[1][1], res
+                        lastRCSCL = None
+                        res = [0, 0, 0, 0, 0]
+                        houseRanges[0] = -1
+                        houseRanges[2] = -1
+                        continue
 
+        if v[0] == 'c':
+            # cscl data
+            # check if bound is set, if no then set
+            side = v[2]
+            if side == 'L':
+                # check left low boound
+                if houseRanges[0] == -1:
+                    # set L low bound
+                    houseRanges[0] = v[-1]
+                    lastLCSCL = (k, v)
+
+                else:
+                    # set L high bound
+                    houseRanges[1] = v[-1]
+                    lastLCSCL = (k, v)
+            else:
+                if houseRanges[2] == -1:
+                    # set R low bound
+                    houseRanges[2] = v[-1]
+                    lastRCSCL = (k, v)
+
+                else:
+                    # set R high bound
+                    houseRanges[3] = v[-1]
+                    lastRCSCL = (k, v)
 
 if __name__ == '__main__':
-    spark = SparkSession.builder.getOrCreate()
+    sc = SparkContext()
 
-    violationData2015 = spark.sparkContext.textFile(csv2015).mapPartitionsWithIndex(exactViolation).cache()
-    #violationData2016 = spark.sparkContext.textFile(csv2015).mapPartitionsWithIndex(exactViolation).cache()
+    violation2015 = sc.textFile(year2015, use_unicode=True)
+    violation2016 = sc.textFile(year2016, use_unicode=True)
+    violation2017 = sc.textFile(year2017, use_unicode=True)
+    violation2018 = sc.textFile(year2018, use_unicode=True)
+    violation2019 = sc.textFile(year2019, use_unicode=True)
 
-    #vData = violationData2015.union(violationData2016)
+    violationData = violation2015.union(violation2016).union(violation2017).union(violation2018).union(violation2019)
 
-    csclData = spark.sparkContext.textFile(CSCLCSV).mapPartitionsWithIndex(exactCSCL).cache()
+    csclData = sc.textFile(nyc_cscl, use_unicode=True)
 
-    violationSchema = StructType([StructField('StreetName', StringType()),
-                                  StructField('Borough', StringType()),
-                                  StructField('HouseNumber', ArrayType(IntegerType())),
-                                  StructField('Side', StringType()),
-                                  StructField('Year', IntegerType()),
-                                  StructField('Count', IntegerType())
-                                  ])
+    res_violation = violationData.mapPartitionsWithIndex(exactViolation)
+    res_cscl = csclData.mapPartitionsWithIndex(exactCSCL)
 
-    csclSchema = StructType([StructField('PhysicalID', IntegerType()),
-                             StructField('FullStreet', StringType()),
-                             StructField('StreetLabel', StringType()),
-                             StructField('Borough', StringType()),
-                             StructField('L', ArrayType(StringType())),
-                             StructField('R', ArrayType(StringType()))
-                             ])
+    res_union = res_violation.union(res_cscl)
+    res_union = res_union.sortByKey()
 
-    df_violation = sqlContext.createDataFrame(violationData2015, violationSchema)
-    df_cscl = sqlContext.createDataFrame(csclData, csclSchema)
+    output = res_union.mapPartitions(filterAndCount).map(lambda x: (int(x[0]), x[1])) \
+        .reduceByKey(lambda x, y: [x[0] + y[0], x[1] + y[1], x[2] + y[2], x[3] + y[3], x[4] + y[4]]) \
+        .sortByKey() \
+        .collect()
 
-    df_res = df_cscl.join(df_violation, [(df_violation.Borough == df_cscl.Borough) & (
-            (df_violation.StreetName == df_cscl.FullStreet) | (df_violation.StreetName == df_cscl.StreetLabel))],
-                          how='left_outer')
-
-    df_res.filter(myfilter(df_res.HouseNumber, df_res.Side, df_res.L, df_res.R)).groupBy('PhysicalID').agg({'Count':'sum'}).show()
+    sc.parallelize(output).saveAsTextFile('BDM_FINAL_OUTPUT')
