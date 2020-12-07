@@ -1,10 +1,13 @@
-import re
+# Haoran He
+# CSC 445 Big Data
+# Final Challenge
 
+import re
 from pyspark import SparkContext
 
 year2015 = '/data/share/bdm/nyc_parking_violation/2015.csv'
 year2016 = '/data/share/bdm/nyc_parking_violation/2016.csv'
-year2017 =  '/data/share/bdm/nyc_parking_violation/2017.csv'
+year2017 = '/data/share/bdm/nyc_parking_violation/2017.csv'
 year2018 = '/data/share/bdm/nyc_parking_violation/2018.csv'
 year2019 = '/data/share/bdm/nyc_parking_violation/2019.csv'
 nyc_cscl = '/data/share/bdm/nyc_cscl.csv'
@@ -193,6 +196,7 @@ def filterAndCount(records):
                     houseRanges[3] = v[-1]
                     lastRCSCL = (k, v)
 
+
 if __name__ == '__main__':
     sc = SparkContext()
 
@@ -215,7 +219,7 @@ if __name__ == '__main__':
     output = res_union.mapPartitions(filterAndCount).map(lambda x: (int(x[0]), x[1])) \
         .reduceByKey(lambda x, y: [x[0] + y[0], x[1] + y[1], x[2] + y[2], x[3] + y[3], x[4] + y[4]]) \
         .sortByKey() \
-        .map(lambda x: (x[0],x[1],x[2],x[3],x[4],x[5])) \
+        .map(lambda x: (x[0],x[1][0],x[1][1],x[1][2],x[1][3],x[1][4])) \
         .collect()
 
     sc.parallelize(output).saveAsTextFile('BDM_FINAL_OUTPUT')
