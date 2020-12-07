@@ -215,6 +215,7 @@ if __name__ == '__main__':
     output = res_union.mapPartitions(filterAndCount).map(lambda x: (int(x[0]), x[1])) \
         .reduceByKey(lambda x, y: [x[0] + y[0], x[1] + y[1], x[2] + y[2], x[3] + y[3], x[4] + y[4]]) \
         .sortByKey() \
+        .map(lambda x: (x[0],x[1],x[2],x[3],x[4],x[5])) \
         .collect()
 
     sc.parallelize(output).saveAsTextFile('BDM_FINAL_OUTPUT')
